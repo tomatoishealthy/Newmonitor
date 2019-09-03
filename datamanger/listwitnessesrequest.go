@@ -126,6 +126,7 @@ func (l *ListWitnessesRequest) request(param *Parameter, wg *sync.WaitGroup) {
 
 	// Report witness
 	t := time.Now()
+
 	if witnesses.Witnesses != nil {
 		for _, w := range witnesses.Witnesses {
 			if w.IsJobs {

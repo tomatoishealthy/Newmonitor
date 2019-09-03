@@ -10,6 +10,9 @@ import (
 	"github.com/sasaxie/monitor/models"
 	"strings"
 	"time"
+	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
+	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
+	"net/http"
 )
 
 // ms: 5min
@@ -80,6 +83,79 @@ func (g *GetNowBlockAlert) Load() {
 		len(g.Nodes))
 }
 
+func callWhoUpdateAnomaly() {
+	DUTY := []string{"吴彬", "岳瑞鹏", "姜阳阳", "张思聪", "吴斌", "梁志彦", "孙昊宇"}
+	Phone := []string{"18903830819", "13311527723", "13810109462", "13466613212", "吴斌", "15256073545", "15901009909"}
+	who  := (time.Now().Unix() - 86400 * 4) / 86400 / 7 % int64(len(DUTY))
+	callUpdateAnomaly(Phone[who])
+}
+
+
+func callUpdateAnomaly(number string) {
+
+	client, err := sdk.NewClientWithAccessKey("default", "LTAIbEOdCXFYrP98", "wNVf3zMK6dqwxvwp2oYsq9iTBYPXq1")
+	if err != nil {
+		panic(err)
+	}
+
+	request := requests.NewCommonRequest()
+	request.Method = "POST"
+	request.Scheme = "https" // https | http
+	request.Domain = "dyvmsapi.aliyuncs.com"
+	request.Version = "2017-05-25"
+	request.ApiName = "SingleCallByTts"
+	request.QueryParams["RegionId"] = "default"
+	request.QueryParams["CalledShowNumber"] = "01086393840"
+	request.QueryParams["CalledNumber"] = number
+	request.QueryParams["TtsCode"] = "TTS_163525650"
+
+	request.QueryParams["TtsParam"] = "{\"app\":\"块更新异常\"}"
+
+
+	_, err = client.ProcessCommonRequest(request)
+	if err != nil {
+		panic(err)
+	}
+}
+
+
+func Get(httpUrl string) float64 {
+	start := time.Now()
+	result, err := http.Get(httpUrl)
+
+	if err != nil {
+		fmt.Print("error", err)
+	}
+	defer func(result  *http.Response) {
+		if (result != nil){
+			result.Body.Close()
+		}
+
+	}(result)
+	elapsed := time.Since(start).Seconds()
+	fmt.Print(elapsed)
+
+
+	return elapsed
+}
+
+
+func (g *GetNowBlockAlert)Update(endpoint string) {
+	for _, n := range g.Nodes {
+		httpUrl :=  fmt.Sprintf("http://%s:%d/%s", n.Ip, n.HttpPort, endpoint);
+		nowElapsed :=Get(httpUrl)
+		httpMap := map[string]string{
+			"httpUrl":   httpUrl,
+		}
+		httpFields := map[string]interface{}{
+			"IP":       fmt.Sprintf("%s:%d", n.Ip, n.HttpPort),
+			"Second":   nowElapsed,
+			"URL":      httpUrl,
+		}
+		influxdb.Client.WriteByTime("api_report_http", httpMap, httpFields, time.Now())
+	}
+}
+
 /**
  Rules:
 	1. Block number no change;
@@ -120,6 +196,13 @@ func (g *GetNowBlockAlert) Start() {
 					IsRecover: false,
 					Msg:       "块更新异常",
 				}
+
+				// 郭宏
+				callUpdateAnomaly("13671062020")
+				// 黄文广
+				callUpdateAnomaly("15910709326")
+				// who
+				callWhoUpdateAnomaly();
 
 				g.Result[k].FreshTime = time.Date(
 					g.Result[k].FreshTime.Year(),
@@ -281,6 +364,10 @@ func (g *GetNowBlockAlert) getBlockNum(q string) (int64, error) {
 
 func (g *GetNowBlockAlert) isOk(ip, tag string, port int,
 	queryTimeS, maxBlockNum, num int64) error {
+	if maxBlockNum == 0 && num == 0 {
+		return nil
+	}
+
 	// 存在的问题：每次都会清空结果，不要这样
 	if maxBlockNum == 0 {
 		logs.Warn(fmt.Sprintf("get now block alert error: [max block num"+

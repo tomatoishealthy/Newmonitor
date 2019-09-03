@@ -10,6 +10,9 @@ import (
 	"github.com/sasaxie/monitor/models"
 	"strings"
 	"time"
+	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
+	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
+	"strconv"
 )
 
 // ms: 1min
@@ -188,6 +191,10 @@ func (l *ListWitnessesAlert) Start() {
 				continue
 			}
 
+			if (v.TotalMissed == 0) {
+				continue
+			}
+
 			totalMissedMark[k] = 1
 
 			l.TotalMissedResult[k] = &ListWitnessesAlertTotalMissedMsg{
@@ -198,12 +205,57 @@ func (l *ListWitnessesAlert) Start() {
 				TotalMissed2: vv.TotalMissed,
 				Msg:          "出块超时",
 			}
+			// who
+			callWhoBlockTimeOut(vv.TotalMissed-v.TotalMissed)
+			// 文广
+			callBlockTimeOut("15910709326", vv.TotalMissed-v.TotalMissed)
+			// 吴斌
+			callBlockTimeOut("18515212681", vv.TotalMissed-v.TotalMissed)
+
 		} else {
 			if _, ok := totalMissedMark[k]; ok {
 				totalMissedMark[k] = 3
 			}
 		}
 	}
+}
+
+func callWhoBlockTimeOut(lost int64) {
+	DUTY := []string{"吴彬", "岳瑞鹏", "姜阳阳", "张思聪", "吴斌", "梁志彦", "孙昊宇"}
+	Phone := []string{"18903830819", "13311527723", "13810109462", "13466613212", "吴斌", "15256073545", "15901009909"}
+	who  := (time.Now().Unix() - 86400 * 4) / 86400 / 7 % int64(len(DUTY))
+	if who == 4 {
+		return;
+	}
+	callBlockTimeOut(Phone[who], lost)
+}
+
+func callBlockTimeOut(number string, lost int64) {
+
+	client, err := sdk.NewClientWithAccessKey("default", "LTAIbEOdCXFYrP98", "wNVf3zMK6dqwxvwp2oYsq9iTBYPXq1")
+	if err != nil {
+		panic(err)
+	}
+
+	request := requests.NewCommonRequest()
+	request.Method = "POST"
+	request.Scheme = "https" // https | http
+	request.Domain = "dyvmsapi.aliyuncs.com"
+	request.Version = "2017-05-25"
+	request.ApiName = "SingleCallByTts"
+	request.QueryParams["RegionId"] = "default"
+	request.QueryParams["CalledShowNumber"] = "01086393840"
+	request.QueryParams["CalledNumber"] = number
+	request.QueryParams["TtsCode"] = "TTS_163525650"
+
+	request.QueryParams["TtsParam"] = "{\"app\":\"出块超时,丢了"+strconv.FormatInt(lost,10)+"块\"}"
+
+
+	_, err = client.ProcessCommonRequest(request)
+	if err != nil {
+		panic(err)
+	}
+
 }
 
 func (l *ListWitnessesAlert) updateTotalMissed(t int64) {

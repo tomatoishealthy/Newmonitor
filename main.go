@@ -13,22 +13,38 @@ import (
 	"time"
 )
 
+var urlList = []string{"wallet/getnowblock", "wallet/listwitnesses", "wallet/getnodeinfo",
+"/wallet/totaltransaction","/wallet/getaccountbyid"}
+
 func main() {
 
 	logs.Info("start monitor")
-
 	go start()
 	go report()
 	go change()
+	go httpReport()
 
 	defer influxdb.Client.C.Close()
 
 	beego.Run()
 }
 
+func httpReport() {
+	c := cron.New()
+	c.AddFunc("0,10,20,30,40,50 * * * * *", func() {
+		getNowBlockAlert := new(alerts.GetNowBlockAlert)
+		getNowBlockAlert.Load()
+		for _, value := range urlList {
+			getNowBlockAlert.Update(value)
+		}
+
+	})
+	c.Start()
+}
+
 func report() {
 	c := cron.New()
-	c.AddFunc("0 0 11 * * *", func() {
+	c.AddFunc("0 0 2 * * *", func() {
 		logs.Debug("report start")
 		r := new(reports.TotalMissed)
 		r.Date = time.Now().AddDate(0, 0, -1)
