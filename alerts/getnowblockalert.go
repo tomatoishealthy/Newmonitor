@@ -12,11 +12,13 @@ import (
 	"time"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
-	"net/http"
+	"github.com/sasaxie/monitor/function"
 )
 
 // ms: 5min
 const Internal5min int64 = 1000 * 60 * 5
+const Internal1s float64 = 1
+const InternalEvent float64  = 3
 
 type GetNowBlockAlert struct {
 	Nodes       []*Node
@@ -85,7 +87,7 @@ func (g *GetNowBlockAlert) Load() {
 
 func callWhoUpdateAnomaly() {
 	DUTY := []string{"吴彬", "岳瑞鹏", "姜阳阳", "张思聪", "吴斌", "梁志彦", "孙昊宇"}
-	Phone := []string{"18903830819", "13311527723", "13810109462", "13466613212", "吴斌", "15256073545", "15901009909"}
+	Phone := []string{"18903830819", "13311527723", "13810109462", "13466613212", "18515212681", "15256073545", "15901009909"}
 	who  := (time.Now().Unix() - 86400 * 4) / 86400 / 7 % int64(len(DUTY))
 	callUpdateAnomaly(Phone[who])
 }
@@ -118,44 +120,6 @@ func callUpdateAnomaly(number string) {
 	}
 }
 
-
-func Get(httpUrl string) float64 {
-	start := time.Now()
-	result, err := http.Get(httpUrl)
-
-	if err != nil {
-		fmt.Print("error", err)
-	}
-	defer func(result  *http.Response) {
-		if (result != nil){
-			result.Body.Close()
-		}
-
-	}(result)
-	elapsed := time.Since(start).Seconds()
-	fmt.Print(elapsed)
-
-
-	return elapsed
-}
-
-
-func (g *GetNowBlockAlert)Update(endpoint string) {
-	for _, n := range g.Nodes {
-		httpUrl :=  fmt.Sprintf("http://%s:%d/%s", n.Ip, n.HttpPort, endpoint);
-		nowElapsed :=Get(httpUrl)
-		httpMap := map[string]string{
-			"httpUrl":   httpUrl,
-		}
-		httpFields := map[string]interface{}{
-			"IP":       fmt.Sprintf("%s:%d", n.Ip, n.HttpPort),
-			"Second":   nowElapsed,
-			"URL":      httpUrl,
-		}
-		influxdb.Client.WriteByTime("api_report_http", httpMap, httpFields, time.Now())
-	}
-}
-
 /**
  Rules:
 	1. Block number no change;
@@ -168,7 +132,7 @@ func (g *GetNowBlockAlert) Start() {
 	g.MinBlockNum = make(map[string]int64)
 	queryTimeS := time.Now().UnixNano() / 1000000
 
-	g.getMaxBlockNum(queryTimeS)
+	g.GetMaxBlockNum(queryTimeS)
 
 	for _, n := range g.Nodes {
 		maxBlockNum := g.MaxBlockNum[n.TagName]
@@ -293,7 +257,9 @@ func (g *GetNowBlockAlert) getNodeBlockNum(ip string, port int,
 	return g.getBlockNum(q)
 }
 
-func (g *GetNowBlockAlert) getMaxBlockNum(
+
+
+func (g *GetNowBlockAlert) GetMaxBlockNum(
 	queryTimeS int64) {
 
 	tagMap := make(map[string]bool)
@@ -310,7 +276,6 @@ func (g *GetNowBlockAlert) getMaxBlockNum(
 "TagName" = '%s'`,
 			"api_get_now_block", fmt.Sprintf("%dms", queryTimeS),
 			fmt.Sprintf("%dms", queryTimeS-Internal5min), k)
-
 		num, _ := g.getBlockNum(q)
 		g.MaxBlockNum[k] = num
 	}
@@ -391,6 +356,136 @@ func (g *GetNowBlockAlert) isOk(ip, tag string, port int,
 			"maxBlockNum: %d, num: %d]", ip, tag, port, maxBlockNum, num))
 		return errors.New("block num update slowly")
 	}
-
 	return nil
+}
+
+
+func (g *GetNowBlockAlert)ReportDelay(fullUrl []string, solidityUrl []string) {
+	for _, n := range g.Nodes {
+		var urllist []string
+		if (n.HttpPort == 8090) {
+			urllist = fullUrl
+		} else {
+			urllist = solidityUrl
+		}
+
+		for _, endpoint := range urllist {
+			httpUrl :=  fmt.Sprintf("http://%s:%d/%s", n.Ip, n.HttpPort, endpoint);
+			nowElapsed := function.Get(httpUrl)
+			httpMap := map[string]string{
+				"IP":   fmt.Sprintf("%s:%d", n.Ip, n.HttpPort),
+				"EndPoint": endpoint,
+			}
+			httpFields := map[string]interface{}{
+				"IP":       fmt.Sprintf("%s:%d", n.Ip, n.HttpPort),
+				"Second":   nowElapsed,
+				"URL":      httpUrl,
+			}
+			influxdb.Client.WriteByTime("api_report_http", httpMap, httpFields, time.Now())
+		}
+	}
+}
+
+//func (g *GetNowBlockAlert)ReportSRDelay() {
+//	for _, n := range g.Nodes {
+//		if n.Type != "sr_witness_node" {
+//			continue
+//		}
+//		httpUrl :=  fmt.Sprintf("http://%s:%d/wallet/getblockbylatestnum?num=1", n.Ip, n.HttpPort);
+//		nowElapsed := function.Get(httpUrl)
+//		httpMap := map[string]string{
+//			"IP":   fmt.Sprintf("%s:%d", n.Ip, n.HttpPort),
+//			"EndPoint": endpoint,
+//		}
+//		httpFields := map[string]interface{}{
+//			"IP":       fmt.Sprintf("%s:%d", n.Ip, n.HttpPort),
+//			"Second":   nowElapsed,
+//			"URL":      httpUrl,
+//		}
+//		influxdb.Client.WriteByTime("api_report_http", httpMap, httpFields, time.Now())
+//	}
+//}
+
+func (g *GetNowBlockAlert)ReportEventQuery(event string, eventQueryUrl []string) {
+	for _, endpoint := range eventQueryUrl {
+		httpUrl :=  fmt.Sprintf("%s%s", event, endpoint);
+		nowElapsed := function.Get(httpUrl)
+		httpMap := map[string]string{
+			"EndPoint": endpoint,
+		}
+		httpFields := map[string]interface{}{
+			"Second":   nowElapsed,
+			"URL":      endpoint,
+		}
+		influxdb.Client.WriteByTime("api_report_eventQuery", httpMap, httpFields, time.Now())
+
+		if (nowElapsed > InternalEvent) {
+			callWhoAPIAnomaly(endpoint)
+		}
+	}
+}
+
+func (g *GetNowBlockAlert)ReportDelayEX(httpex string, fullUrl []string, solidityUrl []string) {
+	for _, endpoint := range fullUrl {
+		httpUrl :=  fmt.Sprintf("%s/%s", httpex, endpoint);
+		nowElapsed := function.Get(httpUrl)
+		httpMap := map[string]string{
+			"EndPoint": endpoint,
+		}
+		httpFields := map[string]interface{}{
+			"Second":   nowElapsed,
+			"URL":      endpoint,
+		}
+		influxdb.Client.WriteByTime("api_report_ex", httpMap, httpFields, time.Now())
+
+		if (nowElapsed > Internal1s) {
+			callWhoAPIAnomaly(endpoint)
+		}
+	}
+	for _, endpoint := range solidityUrl {
+		httpUrl :=  fmt.Sprintf("%s/%s", httpex, endpoint);
+		nowElapsed := function.Get(httpUrl)
+		httpMap := map[string]string{
+			"EndPoint": endpoint,
+		}
+		httpFields := map[string]interface{}{
+			"Second":   nowElapsed,
+			"URL":      endpoint,
+		}
+		influxdb.Client.WriteByTime("api_report_ex", httpMap, httpFields, time.Now())
+	}
+}
+
+func callWhoAPIAnomaly(endpoint string) {
+	DUTY := []string{"吴彬", "岳瑞鹏", "姜阳阳", "张思聪", "吴斌", "梁志彦", "孙昊宇"}
+	Phone := []string{"18903830819", "13311527723", "13810109462", "13466613212", "18515212681", "15256073545", "15901009909"}
+	who  := (time.Now().Unix() - 86400 * 4) / 86400 / 7 % int64(len(DUTY))
+	callAPIAnomaly(endpoint, Phone[who])
+}
+
+
+func callAPIAnomaly(endpoint string, number string) {
+
+	client, err := sdk.NewClientWithAccessKey("default", "LTAIbEOdCXFYrP98", "wNVf3zMK6dqwxvwp2oYsq9iTBYPXq1")
+	if err != nil {
+		panic(err)
+	}
+
+	request := requests.NewCommonRequest()
+	request.Method = "POST"
+	request.Scheme = "https" // https | http
+	request.Domain = "dyvmsapi.aliyuncs.com"
+	request.Version = "2017-05-25"
+	request.ApiName = "SingleCallByTts"
+	request.QueryParams["RegionId"] = "default"
+	request.QueryParams["CalledShowNumber"] = "01086393840"
+	request.QueryParams["CalledNumber"] = number
+	request.QueryParams["TtsCode"] = "TTS_163525650"
+
+	request.QueryParams["TtsParam"] = "{\"app\":\"api接口"+endpoint+"访问超时\"}"
+
+	_, err = client.ProcessCommonRequest(request)
+	if err != nil {
+		panic(err)
+	}
 }

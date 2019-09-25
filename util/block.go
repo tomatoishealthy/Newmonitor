@@ -7,6 +7,7 @@ import (
 	"log"
 )
 
+var maxBlockNum int64= -1
 func GetBlockHash(block core.Block) []byte {
 	if block.BlockHeader == nil {
 		return []byte{}
@@ -29,3 +30,5 @@ func GetBlockHash(block core.Block) []byte {
 
 	return blockHash
 }
+
+

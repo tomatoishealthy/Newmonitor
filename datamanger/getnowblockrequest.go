@@ -19,6 +19,7 @@ const (
 	influxDBFieldNowBlockNode    = "Node"
 	influxDBFieldNowBlockType    = "Type"
 	influxDBFieldNowBlockTagName = "TagName"
+	influxDBIP = "IP"
 	influxDBFieldNowBlockNumber  = "Number"
 	influxDBPointNameNowBlock    = "api_get_now_block"
 )
@@ -133,7 +134,7 @@ func (g *GetNowBlockRequest) request(param *Parameter, wg *sync.WaitGroup) {
 		influxDBFieldNowBlockNode:    param.Node,
 		influxDBFieldNowBlockType:    param.Type,
 		influxDBFieldNowBlockTagName: param.TagName,
-
+		influxDBIP :  param.RequestUrl,
 		influxDBFieldNowBlockNumber: block.BlockHeader.RawData.Number,
 	}
 
