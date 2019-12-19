@@ -407,7 +407,7 @@ func (l *ListWitnessesAlert) Alert() {
 			}
 			`, v.TotalMissedChangeString())
 
-		dingding.DingAlarm.Alarm([]byte(bodyContent))
+		dingding.DingAlarm.Alarm([]byte(bodyContent), v.TotalMissedChangeString())
 	}
 
 	res := l.WitnessesChangeResult.WitnessChangeString()
@@ -421,7 +421,7 @@ func (l *ListWitnessesAlert) Alert() {
 			}
 			`, res)
 
-		dingding.DingAlarm.Alarm([]byte(bodyContent))
+		dingding.DingAlarm.Alarm([]byte(bodyContent), res)
 	}
 
 	for k, v := range totalMissedMark {
@@ -435,7 +435,7 @@ func (l *ListWitnessesAlert) Alert() {
 			}
 			`, fmt.Sprintf("%s恢复出块", k))
 
-			dingding.DingAlarm.Alarm([]byte(bodyContent))
+			dingding.DingAlarm.Alarm([]byte(bodyContent), fmt.Sprintf("%s恢复出块", k))
 			delete(totalMissedMark, k)
 		}
 	}

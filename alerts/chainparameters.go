@@ -111,7 +111,7 @@ func (c *ChainParameters) Judge() {
 			}
 			`, msg)
 
-				dingding.DingAlarm.Alarm([]byte(bodyContent))
+				dingding.DingAlarm.Alarm([]byte(bodyContent), msg)
 			}
 		}
 	}

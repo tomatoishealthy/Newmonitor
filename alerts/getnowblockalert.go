@@ -19,7 +19,7 @@ import (
 const Internal5min int64 = 1000 * 60 * 5
 const Internal1s float64 = 1
 const InternalEvent float64  = 3
-
+var lastBlockNum =  map[string]int64{}
 type GetNowBlockAlert struct {
 	Nodes       []*Node
 	Result      map[string]*GetNowBlockAlertMsg
@@ -85,12 +85,7 @@ func (g *GetNowBlockAlert) Load() {
 		len(g.Nodes))
 }
 
-func callWhoUpdateAnomaly() {
-	DUTY := []string{"吴彬", "岳瑞鹏", "姜阳阳", "张思聪", "吴斌", "梁志彦", "孙昊宇"}
-	Phone := []string{"18903830819", "13311527723", "13810109462", "13466613212", "18515212681", "15256073545", "15901009909"}
-	who  := (time.Now().Unix() - 86400 * 4) / 86400 / 7 % int64(len(DUTY))
-	callUpdateAnomaly(Phone[who])
-}
+e
 
 
 func callUpdateAnomaly(number string) {
@@ -239,7 +234,7 @@ func (g *GetNowBlockAlert) Alert() {
 			}
 			`, msg)
 
-		dingding.DingAlarm.Alarm([]byte(bodyContent))
+		dingding.DingAlarm.Alarm([]byte(bodyContent), msg)
 	}
 }
 
@@ -256,8 +251,6 @@ func (g *GetNowBlockAlert) getNodeBlockNum(ip string, port int,
 
 	return g.getBlockNum(q)
 }
-
-
 
 func (g *GetNowBlockAlert) GetMaxBlockNum(
 	queryTimeS int64) {
@@ -332,6 +325,10 @@ func (g *GetNowBlockAlert) isOk(ip, tag string, port int,
 	if maxBlockNum == 0 && num == 0 {
 		return nil
 	}
+	if (num == 0 && lastBlockNum[ip] == 0) {
+		return nil
+	}
+	lastBlockNum[ip] = num
 
 	// 存在的问题：每次都会清空结果，不要这样
 	if maxBlockNum == 0 {
@@ -381,6 +378,7 @@ func (g *GetNowBlockAlert)ReportDelay(fullUrl []string, solidityUrl []string) {
 				"Second":   nowElapsed,
 				"URL":      httpUrl,
 			}
+
 			influxdb.Client.WriteByTime("api_report_http", httpMap, httpFields, time.Now())
 		}
 	}
@@ -420,15 +418,28 @@ func (g *GetNowBlockAlert)ReportEventQuery(event string, eventQueryUrl []string)
 		influxdb.Client.WriteByTime("api_report_eventQuery", httpMap, httpFields, time.Now())
 
 		if (nowElapsed > InternalEvent) {
-			callWhoAPIAnomaly(endpoint)
+			retryGet(httpUrl, endpoint)
 		}
 	}
 }
 
+func retryGet(httpUrl, endpoint string) float64{
+	nowElapsed := function.Get(httpUrl)
+	if (nowElapsed > Internal1s) {
+		callWhoAPIAnomaly(endpoint)
+		dingdingAlertAnomaly(httpUrl, nowElapsed)
+	}
+	return nowElapsed
+}
+
 func (g *GetNowBlockAlert)ReportDelayEX(httpex string, fullUrl []string, solidityUrl []string) {
 	for _, endpoint := range fullUrl {
-		httpUrl :=  fmt.Sprintf("%s/%s", httpex, endpoint);
+		httpUrl :=  fmt.Sprintf("%s%s", httpex, endpoint);
 		nowElapsed := function.Get(httpUrl)
+		if (nowElapsed > Internal1s) {
+			retryGet(httpUrl, endpoint)
+		}
+
 		httpMap := map[string]string{
 			"EndPoint": endpoint,
 		}
@@ -437,14 +448,14 @@ func (g *GetNowBlockAlert)ReportDelayEX(httpex string, fullUrl []string, solidit
 			"URL":      endpoint,
 		}
 		influxdb.Client.WriteByTime("api_report_ex", httpMap, httpFields, time.Now())
-
-		if (nowElapsed > Internal1s) {
-			callWhoAPIAnomaly(endpoint)
-		}
 	}
 	for _, endpoint := range solidityUrl {
-		httpUrl :=  fmt.Sprintf("%s/%s", httpex, endpoint);
+		httpUrl :=  fmt.Sprintf("%s%s", httpex, endpoint);
 		nowElapsed := function.Get(httpUrl)
+		if (nowElapsed > Internal1s) {
+			retryGet(httpUrl, endpoint)
+		}
+
 		httpMap := map[string]string{
 			"EndPoint": endpoint,
 		}
@@ -454,6 +465,20 @@ func (g *GetNowBlockAlert)ReportDelayEX(httpex string, fullUrl []string, solidit
 		}
 		influxdb.Client.WriteByTime("api_report_ex", httpMap, httpFields, time.Now())
 	}
+}
+
+func dingdingAlertAnomaly(httpUrl string, nowElapsed float64) {
+	msg	 := fmt.Sprintf("url: %s 访问超时%v", httpUrl, nowElapsed)
+	fmt.Print(msg)
+	bodyContent := fmt.Sprintf(`
+			{
+				"msgtype": "text",
+				"text": {
+					"content": "%s"
+				}
+			}
+			`, msg)
+	dingding.DingAlarm.Alarm([]byte(bodyContent), msg)
 }
 
 func callWhoAPIAnomaly(endpoint string) {
@@ -482,7 +507,7 @@ func callAPIAnomaly(endpoint string, number string) {
 	request.QueryParams["CalledNumber"] = number
 	request.QueryParams["TtsCode"] = "TTS_163525650"
 
-	request.QueryParams["TtsParam"] = "{\"app\":\"api接口"+endpoint+"访问超时\"}"
+	request.QueryParams["TtsParam"] = "{\"app\":\"http api接口"+endpoint+"访问超时\"}"
 
 	_, err = client.ProcessCommonRequest(request)
 	if err != nil {

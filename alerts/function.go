@@ -14,6 +14,7 @@ func MaxBlockReportAlert() {
 	getNowBlockAlert.MaxBlockNum = make(map[string]int64)
 	getNowBlockAlert.Load()
 	getNowBlockAlert.GetMaxBlockNum(queryTimeS)
+	msg := "产块异常，请及时查看原因"
 
 	tmp := getNowBlockAlert.MaxBlockNum["主网"]
 	if (tmp == maxBlockNum) {
@@ -21,12 +22,12 @@ func MaxBlockReportAlert() {
 			{
 				"msgtype": "text",
 				"text": {
-					"content": "产块异常，请及时查看原因"
+					"content": "%s"
 				}
 			}
-			`)
+			`, msg)
 
-		dingding.DingAlarm.Alarm([]byte(bodyContent))
+		dingding.DingAlarm.Alarm([]byte(bodyContent), msg)
 	}
 	maxBlockNum = tmp
 }

@@ -4,7 +4,8 @@ import (
 	"github.com/astaxie/beego"
 	"github.com/astaxie/beego/logs"
 	"github.com/sasaxie/monitor/common/config"
-	"github.com/sasaxie/monitor/common/http"
+	"github.com/sasaxie/monitor/slack"
+	"github.com/monitor/common/http"
 )
 
 var DingAlarm *Alarm
@@ -19,15 +20,22 @@ type Alarm struct {
 	Url string
 }
 
-func (d *Alarm) Alarm(content []byte) {
+func (d *Alarm) Alarm(content []byte, context string) {
 	header := make(map[string]string)
 
 	header["Content-Type"] = "application/json"
+
 
 	body, err := http.Post(content, d.Url, header)
 
 	if err != nil {
 		logs.Warn("dingDing alarm post error:", err)
+		return
+	}
+
+	err = slack.SendSlackNotification(context)
+	if err != nil {
+		logs.Warn("slack alarm post error:", err)
 		return
 	}
 

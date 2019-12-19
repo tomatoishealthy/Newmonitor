@@ -11,6 +11,7 @@ import (
 	"github.com/sasaxie/monitor/reports"
 	_ "github.com/sasaxie/monitor/routers"
 	"time"
+	"github.com/sasaxie/monitor/slack"
 )
 
 var httpex = "https://httpapi.tronex.io/"
@@ -26,8 +27,8 @@ var fullUrl =
 	          "wallet/listnodes",
 	          "wallet/getblockbynum?num=1",
 	          "wallet/getblockbyid?value=00000000000000010ff5414c5cfbe9eae982e8cef7eb2399a39118e1206c8247",
-		      "wallet/getblockbylimitnext?startNum=1&endNum=10",
-		      "wallet/getblockbylatestnum?num=10",
+		      "wallet/getblockbylimitnext?startNum=1&endNum=1",
+		      "wallet/getblockbylatestnum?num=1",
 		      "wallet/gettransactionbyid?value=6a9c700b66caf4a47ad6b1c3cc06dbcf04d1ce98ad2f305bba23918cd06fcee9",
 		      "wallet/gettransactioninfobyid?value=6a9c700b66caf4a47ad6b1c3cc06dbcf04d1ce98ad2f305bba23918cd06fcee9",
 		      "wallet/gettransactioncountbyblocknum?num=4000012",
@@ -47,8 +48,8 @@ var solidityUrl =
 	           "walletsolidity/getaccount?address=TQJkDDDGQoi2yrfdpG5nUSHcgJ1KpBXan7&visible=true",
 		       "walletsolidity/getblockbynum?num=1",
 		       "walletsolidity/getblockbyid?value=00000000000000010ff5414c5cfbe9eae982e8cef7eb2399a39118e1206c8247",
-		       "walletsolidity/getblockbylimitnext?startNum=1&endNum=10",
-		       "walletsolidity/getblockbylatestnum?num=10",
+		       "walletsolidity/getblockbylimitnext?startNum=1&endNum=1",
+		       "walletsolidity/getblockbylatestnum?num=1",
 		       "walletsolidity/gettransactionbyid?value=6a9c700b66caf4a47ad6b1c3cc06dbcf04d1ce98ad2f305bba23918cd06fcee9",
 		       "walletsolidity/gettransactioninfobyid?value=6a9c700b66caf4a47ad6b1c3cc06dbcf04d1ce98ad2f305bba23918cd06fcee9",
 		       "walletsolidity/gettransactioncountbyblocknum?num=4000012",
@@ -106,13 +107,19 @@ func httpReport() {
 	c.AddFunc("0,20,40 * * * * *", func() {
 		getNowBlockAlert := new(alerts.GetNowBlockAlert)
 		getNowBlockAlert.Load()
-		getNowBlockAlert.ReportDelay(fullUrl, solidityUrl)
 		//getNowBlockAlert.ReportSRDelay()
 		getNowBlockAlert.ReportDelayEX(httpex, fullUrl, solidityUrl)
 		getNowBlockAlert.ReportEventQuery(httpevent, eventQueryUrl)
+		getNowBlockAlert.ReportDelay(fullUrl, solidityUrl)
 		//getNowBlockAlert.ReportEventQuery(httpTestEvent, eventQueryUrl)
 	})
 	c.Start()
+}
+
+func callWhoOnDuty() string {
+	DUTY := []string{"吴彬", "岳瑞鹏", "姜阳阳", "张思聪", "吴斌", "梁志彦", "孙昊宇"}
+	who  := (time.Now().Unix() - 86400 * 4) / 86400 / 7 % int64(len(DUTY))
+	return DUTY[who]
 }
 
 func report() {
@@ -125,6 +132,8 @@ func report() {
 		r.ComputeData()
 		r.Save()
 		r.Report()
+		context := "今天由" + callWhoOnDuty()+ "负责主网所有问题"
+		slack.SendSlackNotification(context)
 	})
 	c.Start()
 }
